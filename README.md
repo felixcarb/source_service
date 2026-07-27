@@ -27,7 +27,7 @@ pip install source-service
 Or install directly from Git (development):
 
 ```bash
-pip install git+https://github.com/felixcarb/source-service.git
+pip install git+https://github.com/felixcarb/source_service.git
 ```
 
 ---
@@ -260,5 +260,5 @@ MIT © [Felix Carbonell]
 
 ## 🧭 Further reading
 
-- [Source code on GitHub](https://github.com/felixcarb/source-service)
-- [Issue tracker](https://github.com/felixcarb/source-service/issues)
+- [Source code on GitHub](https://github.com/felixcarb/source_service)
+- [Issue tracker](https://github.com/felixcarb/source_service/issues)
