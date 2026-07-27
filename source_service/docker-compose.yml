@@ -1,0 +1,83 @@
+
+services:
+  # ──────────────────────────────────────────────────────────
+  # FTP Server (vsftpd)
+  # ──────────────────────────────────────────────────────────
+  ftp:
+    image: fauria/vsftpd:latest
+    container_name: test_ftp
+    ports:
+      - "21:21"
+      - "21000-21010:21000-21010"
+    environment:
+      - FTP_USER=ftpuser
+      - FTP_PASS=ftppass
+      - PASV_ADDRESS=localhost
+      - PASV_MIN_PORT=21000
+      - PASV_MAX_PORT=21010
+    volumes:
+      - ./ftp-data:/home/vsftpd
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # SFTP Server (atmoz/sftp)
+  # ──────────────────────────────────────────────────────────
+  sftp:
+    image: atmoz/sftp:latest
+    container_name: test_sftp
+    ports:
+      - "2222:22"
+    command: "sftpuser:sftppass:1001:1001:/home/sftpuser/data"
+    volumes:
+      - ./sftp-data:/home/sftpuser/data
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # SMB/CIFS Server (Samba)
+  # ──────────────────────────────────────────────────────────
+  smb:
+    image: dperson/samba:latest
+    container_name: test_smb
+    ports:
+      - "139:139"
+      - "445:445"
+    environment:
+      - TZ=UTC
+    command: |
+      -p
+      -s "share;/share;yes;no;no;smbuser"
+      -u "smbuser;smbpass"
+    volumes:
+      - ./smb-data:/share
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # S3 (LocalStack)
+  # ──────────────────────────────────────────────────────────
+  localstack:
+    image: localstack/localstack:3.4.0
+    container_name: test_localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      #- ./localstack-data:/tmp/localstack
+      - ./localstack-init:/docker-entrypoint-initaws.d
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # API Mock (servicio REST simple con Python)
+  # ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api-mock
+      dockerfile: Dockerfile
+    container_name: test_api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

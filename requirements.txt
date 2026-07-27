@@ -1,0 +1,42 @@
+# ============================================================
+# Dependencias de producción
+# ============================================================
+
+# AWS S3
+boto3>=1.26.0
+
+# SFTP / SSH
+paramiko>=2.10.0
+
+# Cliente SMB (SMB2/SMB3)
+smbprotocol>=1.17.0
+
+# Validación de configuraciones con JSON Schema
+jsonschema>=4.0.0
+
+# APIs REST
+requests>=2.28.0
+
+# (Opcional) Para logging avanzado
+# python-json-logger>=2.0.0
+
+
+# ============================================================
+# Dependencias de desarrollo (tests, linting, etc.)
+# ============================================================
+
+# Linting y formato
+# ruff>=0.1.0
+# black>=23.0.0
+# isort>=5.12.0
+
+# Type checking (opcional, pero recomendado)
+# mypy>=1.0.0
+# types-requests>=2.28.0
+# types-paramiko>=2.10.0
+
+# Para desarrollo interactivo
+# ipython>=8.0.0
+
+# Para depuración y logs más detallados
+python-dotenv>=1.0.0  (si usas variables de entorno)

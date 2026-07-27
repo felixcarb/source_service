@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "source-service"
+version = "0.1.0"
+description = "Generic service for fetching documents from multiple sources: S3, FTP, SFTP, SMB, API, and more"
+readme = "README.md"
+authors = [
+    {name = "Felix Carbonell", email = "felixcarb@gmail.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "boto3>=1.26.0",
+    "paramiko>=2.10.0",
+    "smbprotocol>=1.17.0",          # for SMB
+    "jsonschema>=4.0.0",
+    "requests>=2.28.0",      # for API
+]
+
