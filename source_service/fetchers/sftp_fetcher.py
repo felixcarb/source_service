@@ -53,7 +53,7 @@ class SFTPSource(DocumentSource):
             files = sftp.listdir_attr(path)
             documents = []
             for f in files:
-                if not f.filename.startswith('.'):
+                if not f.filename.startswith('.') and not (f.st_mode & 0o40000):
                     documents.append(Document(
                         key=f"{path}/{f.filename}".replace('//', '/'),
                         metadata={

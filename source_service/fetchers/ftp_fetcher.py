@@ -35,20 +35,19 @@ class FTPSource(DocumentSource):
             raise SourceConnectionError(f"FTP connection error: {e}")
 
     def _parse_list_line(self, line: str, base_path: str) -> Optional[Document]:
-        """Parse a line from FTP LIST command (Unix format)."""
         parts = line.split()
         if len(parts) < 9:
             return None
-
+        # Si la línea comienza con 'd', es un directorio, lo ignoramos
+        if line.startswith('d'):
+            return None
         filename = ' '.join(parts[8:])
         if filename.startswith('.'):
             return None
-
         try:
             size = int(parts[4])
         except ValueError:
             size = 0
-
         return Document(
             key=f"{base_path}/{filename}".replace('//', '/'),
             metadata={
