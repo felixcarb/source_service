@@ -5,6 +5,7 @@ dist/
 build/
 .venv/
 .env
+.venv-packaging/
 .coverage
 .pytest_cache/
 
