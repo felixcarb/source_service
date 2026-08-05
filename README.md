@@ -32,7 +32,7 @@ pip install git+https://github.com/felixcarb/source_service.git
 
 To update to the latest version from the Git repository:
 ```bash
-pip install --upgrade git+https://github.com/your-org/source-service.git
+pip install --upgrade git+https://github.com/felixcarb/source_service.git
 ```
 
 ---
