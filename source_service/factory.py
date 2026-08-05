@@ -5,6 +5,8 @@ from .fetchers.sftp_fetcher import SFTPSource
 from .fetchers.smb_fetcher import SMBSource
 from .fetchers.api_fetcher import APISource
 from .fetchers.pop3_fetcher import POP3Source
+from .fetchers.dropbox_fetcher import DropboxSource
+from .fetchers.drive_fetcher import DriveSource
 from .exceptions import InvalidConfigurationError
 
 
@@ -16,6 +18,8 @@ class SourceFactory:
         'smb': SMBSource,
         'api': APISource,
         'pop3': POP3Source,
+        'dropbox': DropboxSource,
+        'drive': DriveSource,
     }
 
     @classmethod

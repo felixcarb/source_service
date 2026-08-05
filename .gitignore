@@ -8,4 +8,5 @@ build/
 .venv-packaging/
 .coverage
 .pytest_cache/
+*-data/
 

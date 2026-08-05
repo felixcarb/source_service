@@ -1,7 +1,7 @@
 # source_service
 
 A generic, pluggable Python service for fetching documents from multiple sources.  
-Supports: **FTP, SFTP, S3, SMB, API, POP3** — and easily extensible for custom sources.
+Supports: **FTP, SFTP, S3, SMB, API, POP3, Dropbox, Google Drive** — and easily extensible for custom sources.
 
 > Designed to be **Django‑agnostic**: can be used in any Python project, scripts, Lambdas, or Celery tasks.
 
@@ -28,6 +28,11 @@ Or install directly from Git (development):
 
 ```bash
 pip install git+https://github.com/felixcarb/source_service.git
+```
+
+To update to the latest version from the Git repository:
+```bash
+pip install --upgrade git+https://github.com/your-org/source-service.git
 ```
 
 ---
@@ -71,6 +76,8 @@ with open('report.pdf', 'wb') as f:
 | **SMB / CIFS** | `smb` | `smbprotocol` |
 | **REST API** | `api` | `requests` |
 | **POP3** | `pop3` | – (standard library) |
+| **Dropbox** | `dropbox` | `requests` |
+| **Google Drive** | `drive` | `requests` |
 
 ---
 
@@ -143,6 +150,33 @@ config = {
     'use_ssl': True,
     'username': 'user@gmail.com',
     'password': 'app-password',
+}
+```
+
+
+### Dropbox
+```python
+config = {
+    'access_token': 'your_access_token',     # required
+    'refresh_token': 'your_refresh_token',   # optional (for auto‑refresh)
+    'app_key': 'your_app_key',               # optional (needed with refresh_token)
+    'app_secret': 'your_app_secret',         # optional (needed with refresh_token)
+    'path': '/',                             # folder to list (default '/')
+}
+```
+
+
+### Google Drive
+```python
+config = {
+    'access_token': 'your_access_token',     # required
+    'refresh_token': 'your_refresh_token',   # optional (for auto‑refresh)
+    'client_id': 'your_client_id',           # optional (needed with refresh_token)
+    'client_secret': 'your_client_secret',   # optional (needed with refresh_token)
+    'query': "'folder_id' in parents",       # optional, Drive search query
+    'mime_type': 'application/pdf',          # optional, filter by MIME type
+    'export_mime': 'application/pdf',        # optional, export format for Google Workspace files
+    'page_size': 100,                        # optional, max files per request
 }
 ```
 
@@ -254,7 +288,7 @@ Contributions are welcome! Please:
 
 ## 📄 License
 
-MIT © [Felix Carbonell]
+MIT © Felix Carbonell
 
 ---
 
