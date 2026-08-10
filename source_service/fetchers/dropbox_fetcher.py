@@ -22,19 +22,19 @@ class DropboxSource(DocumentSource):
     def _refresh_access_token(self, config: Dict[str, Any]) -> str:
         """Refresh the access token using refresh_token."""
         refresh_token = config.get('refresh_token')
-        app_key = config.get('app_key')
-        app_secret = config.get('app_secret')
+        client_id = config.get('client_id')
+        client_secret = config.get('client_secret')
 
-        if not refresh_token or not app_key or not app_secret:
+        if not refresh_token or not client_id or not client_secret:
             raise AuthenticationError(
-                "Missing refresh_token, app_key, or app_secret for token refresh")
+                "Missing refresh_token, client_id, or client_secret for token refresh")
 
         url = "https://api.dropboxapi.com/oauth2/token"
         data = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": app_key,
-            "client_secret": app_secret,
+            "client_id": client_id,
+            "client_secret": client_secret,
         }
 
         try:
@@ -94,7 +94,7 @@ class DropboxSource(DocumentSource):
             raise SourceConnectionError(f"Dropbox API error: {e}")
 
     def list_documents(self, config: Dict[str, Any]) -> List[Document]:
-        path = config.get('path', '')
+        path = config.get('folder_path', '')
         recursive = config.get('recursive', False)
 
         url = "https://api.dropboxapi.com/2/files/list_folder"
