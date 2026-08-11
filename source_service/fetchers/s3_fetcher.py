@@ -8,18 +8,25 @@ from ..exceptions import SourceConnectionError, DocumentNotFoundError, InvalidCo
 class S3Source(DocumentSource):
     def _get_client(self, config: Dict[str, Any]):
         """Crea y devuelve un cliente S3 con endpoint personalizado si se proporciona."""
-        session = boto3.Session(
-            aws_access_key_id=config.get('access_key'),
-            aws_secret_access_key=config.get('secret_key'),
-            region_name=config.get('region', 'eu-west-2')
-        )
+        access_key = config.get('access_key_id') or config.get('access_key')
+        secret_key = config.get('secret_access_key') or config.get('secret_key')
+        session_token = config.get('session_token')
+        region = config.get('region', 'eu-west-2')
         endpoint_url = config.get('endpoint_url')
+
+        session = boto3.Session(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token,
+            region_name=region
+        )
+
         if endpoint_url:
             return session.client('s3', endpoint_url=endpoint_url)
         return session.client('s3')
 
     def list_documents(self, config: Dict[str, Any]) -> List[Document]:
-        bucket = config.get('bucket')
+        bucket = config.get('bucket_name') or config.get('bucket')
         prefix = config.get('prefix', '')
         if not bucket:
             raise InvalidConfigurationError("Missing 'bucket' in S3 config")
@@ -45,7 +52,7 @@ class S3Source(DocumentSource):
             raise SourceConnectionError(f"S3 error: {e}")
 
     def fetch_document(self, config: Dict[str, Any], key: str) -> Document:
-        bucket = config.get('bucket')
+        bucket = config.get('bucket_name') or config.get('bucket')
         if not bucket:
             raise InvalidConfigurationError("Missing 'bucket' in S3 config")
 
@@ -82,7 +89,8 @@ class S3Source(DocumentSource):
         Mueve un objeto S3 de una ubicación a otra (mismo o diferente bucket)
         sin descargar el contenido. Retorna True si éxito, lanza excepción si falla.
         """
-        source_bucket = config.get('bucket')
+        source_bucket = config.get(
+            'bucket_name') or config.get('bucket')
         if not source_bucket:
             raise InvalidConfigurationError(
                 "Missing 'source bucket' in S3 config")
@@ -106,7 +114,7 @@ class S3Source(DocumentSource):
 
     def delete_object(self, config: Dict[str, Any], key: str) -> bool:
         """Elimina un objeto de S3. Retorna True si éxito, lanza excepción si falla."""
-        bucket = config.get('bucket')
+        bucket = config.get('bucket_name') or config.get('bucket')
         if not bucket:
             raise InvalidConfigurationError("Missing 'bucket' in S3 config")
 
