@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "source-service"
-version = "0.2.4"
+version = "0.2.5"
 description = "Generic service for fetching documents from multiple sources: S3, FTP, SFTP, SMB, API, and more"
 readme = "README.md"
 authors = [

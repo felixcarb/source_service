@@ -20,14 +20,16 @@ class FTPSource(DocumentSource):
         username = config.get('username', 'anonymous')
         password = config.get('password', '')
         timeout = config.get('timeout', 30)
+        passive = config.get('passive', True)
 
         if not host:
             raise InvalidConfigurationError("Missing 'host' in FTP config")
 
         try:
             ftp = FTP()
-            ftp.connect(host, port, timeout=timeout)  # ✅ timeout incluido
+            ftp.connect(host, port, timeout=timeout)
             ftp.login(username, password)
+            ftp.set_pasv(passive)
             return ftp
         except error_perm as e:
             raise AuthenticationError(f"FTP authentication failed: {e}")
