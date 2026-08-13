@@ -1,7 +1,7 @@
 # source_service
 
 A generic, pluggable Python service for fetching documents from multiple sources.  
-Supports: **FTP, SFTP, S3, SMB, API, POP3, Dropbox, Google Drive** — and easily extensible for custom sources.
+Supports: **FTP, SFTP, S3, SMB, API, POP3, Dropbox, Google Drive, Microsoft OneDrive** — and easily extensible for custom sources.
 
 > Designed to be **Django‑agnostic**: can be used in any Python project, scripts, Lambdas, or Celery tasks.
 
@@ -179,6 +179,17 @@ config = {
     'page_size': 100,                        # optional, max files per request
 }
 ```
+
+
+### OneDrive
+```python
+config = {
+    'access_token': 'your_access_token',
+    'refresh_token': 'your_refresh_token',   # optional
+    'client_id': 'your_client_id',           # optional, needed for refresh
+    'client_secret': 'your_client_secret',   # optional, needed for refresh
+    'path': '/documents',                    # folder path to list
+}
 
 ---
 

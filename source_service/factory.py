@@ -7,6 +7,7 @@ from .fetchers.api_fetcher import APISource
 from .fetchers.pop3_fetcher import POP3Source
 from .fetchers.dropbox_fetcher import DropboxSource
 from .fetchers.drive_fetcher import DriveSource
+from .fetchers.onedrive_fetcher import OneDriveSource
 from .exceptions import InvalidConfigurationError
 
 
@@ -20,6 +21,7 @@ class SourceFactory:
         'pop3': POP3Source,
         'dropbox': DropboxSource,
         'drive': DriveSource,
+        'onedrive': OneDriveSource,
     }
 
     @classmethod
