@@ -1,7 +1,7 @@
 # source_service
 
 A generic, pluggable Python service for fetching documents from multiple sources.  
-Supports: **FTP, SFTP, S3, SMB, API, POP3, Dropbox, Google Drive, Microsoft OneDrive** — and easily extensible for custom sources.
+Supports: **FTP, FTPS, SFTP, S3, SMB, API, POP3, Dropbox, Google Drive, Microsoft OneDrive** — and easily extensible for custom sources.
 
 > Designed to be **Django‑agnostic**: can be used in any Python project, scripts, Lambdas, or Celery tasks.
 
@@ -72,6 +72,7 @@ with open('report.pdf', 'wb') as f:
 |--------|------------|--------------|
 | **Amazon S3** | `s3` | `boto3` |
 | **FTP** | `ftp` | – (standard library) |
+| **FTPS (FTP over SSL/TLS)** | `ftps` | – (standard library) |
 | **SFTP** | `sftp` | `paramiko` |
 | **SMB / CIFS** | `smb` | `smbprotocol` |
 | **REST API** | `api` | `requests` |
@@ -116,6 +117,21 @@ config = {
     'username': 'anonymous',
     'password': 'pass',
     'path': '/pub',
+}
+```
+
+### FTPS (FTP over SSL/TLS)
+```python
+config = {
+    'host': 'ftps.example.com',
+    'port': 21,                     # 990 for implicit FTPS
+    'username': 'user',
+    'password': 'pass',
+    'path': '/documents',           # directory to list
+    'timeout': 60,                  # optional, default 30
+    'passive': True,                # optional, default True
+    'implicit': False,              # optional, use implicit SSL on port 990
+    'validate_cert': True,          # optional, verify server certificate
 }
 ```
 

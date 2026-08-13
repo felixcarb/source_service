@@ -8,6 +8,7 @@ from .fetchers.pop3_fetcher import POP3Source
 from .fetchers.dropbox_fetcher import DropboxSource
 from .fetchers.drive_fetcher import DriveSource
 from .fetchers.onedrive_fetcher import OneDriveSource
+from .fetchers.ftps_fetcher import FTPSSource
 from .exceptions import InvalidConfigurationError
 
 
@@ -22,6 +23,7 @@ class SourceFactory:
         'dropbox': DropboxSource,
         'drive': DriveSource,
         'onedrive': OneDriveSource,
+        'ftps': FTPSSource,
     }
 
     @classmethod
