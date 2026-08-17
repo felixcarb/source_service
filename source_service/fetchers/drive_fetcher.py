@@ -87,6 +87,7 @@ class DriveSource(DocumentSource):
         """
         mime_type = config.get('mime_type')
         query = config.get('query', "")
+        folder_id = config.get('folder_id')
         page_size = config.get('page_size', 100)
         fields = config.get(
             'fields', "files(id, name, mimeType, size, modifiedTime, webViewLink, parents), nextPageToken")
@@ -99,6 +100,8 @@ class DriveSource(DocumentSource):
         if query:
             q_parts.append(f"({query})")
         q = " and ".join(q_parts)
+        if folder_id:
+            q_parts.append(f"'{folder_id}' in parents")
 
         url = "https://www.googleapis.com/drive/v3/files"
         params = {
