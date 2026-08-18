@@ -99,9 +99,12 @@ class DriveSource(DocumentSource):
             q_parts.append(f"mimeType = '{mime_type}'")
         if query:
             q_parts.append(f"({query})")
-        q = " and ".join(q_parts)
         if folder_id:
             q_parts.append(f"'{folder_id}' in parents")
+        q = " and ".join(q_parts)
+
+        print(f"DEBUG DriveSource.list_documents: folder_id={folder_id}")
+        print(f"DEBUG DriveSource.list_documents: query final = {q}")
 
         url = "https://www.googleapis.com/drive/v3/files"
         params = {
