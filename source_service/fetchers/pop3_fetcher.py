@@ -153,3 +153,18 @@ class POP3Source(DocumentSource):
                     # Loggear error pero continuar con los demás
                     print(f"Error fetching {doc.key}: {e}")
             return all_docs
+
+    def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        """
+        POP3 no admite mover correos entre carpetas.
+        Siempre retorna False.
+        """
+        return False
+
+    def delete_document(self, config: Dict[str, Any], key: str) -> bool:
+        """
+        No se implementa eliminación de correos para evitar efectos laterales
+        (cambios en la numeración de mensajes).
+        Siempre retorna False.
+        """
+        return False

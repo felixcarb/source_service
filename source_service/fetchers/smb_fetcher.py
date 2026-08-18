@@ -1,3 +1,4 @@
+import os
 import smbclient
 from typing import List, Dict, Any, Optional
 
@@ -114,3 +115,31 @@ class SMBSource(DocumentSource):
             return [self.fetch_document(config, key) for key in keys]
         docs = self.list_documents(config)
         return [self.fetch_document(config, doc.key) for doc in docs]
+
+    def delete_document(self, config: Dict[str, Any], key: str) -> bool:
+        """Elimina un archivo del recurso SMB."""
+        self._ensure_session(config)
+        unc_path = self._get_unc_path(config, key)
+        try:
+            smbclient.remove(unc_path)
+            return True
+        except Exception as e:
+            print(f"SMB delete error: {e}")
+            return False
+
+    def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        """Mueve/renombra un archivo en SMB."""
+        self._ensure_session(config)
+        old_unc = self._get_unc_path(config, key)
+        if destination.endswith('/'):
+            filename = os.path.basename(key)
+            # destination es relativo al share, construimos UNC
+            new_unc = self._get_unc_path(config, destination + filename)
+        else:
+            new_unc = self._get_unc_path(config, destination)
+        try:
+            smbclient.rename(old_unc, new_unc)
+            return True
+        except Exception as e:
+            print(f"SMB move error: {e}")
+            return False

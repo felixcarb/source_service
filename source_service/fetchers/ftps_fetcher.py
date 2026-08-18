@@ -1,4 +1,5 @@
 from ftplib import FTP_TLS, error_perm
+import os
 import ssl
 from typing import List, Dict, Any, Optional
 from io import BytesIO
@@ -145,3 +146,30 @@ class FTPSSource(DocumentSource):
             return [self.fetch_document(config, key) for key in keys]
         docs = self.list_documents(config)
         return [self.fetch_document(config, doc.key) for doc in docs]
+
+    def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        ftp = self._connect(config)
+        try:
+            if destination.endswith('/'):
+                filename = os.path.basename(key)
+                new_path = destination + filename
+            else:
+                new_path = destination
+            ftp.rename(key, new_path)
+            return True
+        except Exception as e:
+            print(f"FTPS move error: {e}")
+            return False
+        finally:
+            ftp.quit()
+
+    def delete_document(self, config: Dict[str, Any], key: str) -> bool:
+        ftp = self._connect(config)
+        try:
+            ftp.delete(key)
+            return True
+        except Exception as e:
+            print(f"FTPS delete error: {e}")
+            return False
+        finally:
+            ftp.quit()

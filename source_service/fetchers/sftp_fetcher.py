@@ -1,4 +1,5 @@
 import paramiko
+import os
 from typing import List, Dict, Any, Optional
 from ..base import DocumentSource, Document
 from ..exceptions import (
@@ -100,3 +101,33 @@ class SFTPSource(DocumentSource):
             return [self.fetch_document(config, key) for key in keys]
         docs = self.list_documents(config)
         return [self.fetch_document(config, doc.key) for doc in docs]
+
+    def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        """Move/rename a file en SFTP."""
+        sftp = self._connect(config)
+        try:
+            if destination.endswith('/'):
+                # if destiny is a directory: keep name
+                filename = os.path.basename(key)
+                new_path = os.path.join(destination, filename)
+            else:
+                new_path = destination
+            sftp.rename(key, new_path)
+            return True
+        except Exception as e:
+            print(f"SFTP move error: {e}")
+            return False
+        finally:
+            sftp.close()
+
+    def delete_document(self, config: Dict[str, Any], key: str) -> bool:
+        """Removes a file from SFTP."""
+        sftp = self._connect(config)
+        try:
+            sftp.remove(key)
+            return True
+        except Exception as e:
+            print(f"SFTP delete error: {e}")
+            return False
+        finally:
+            sftp.close()

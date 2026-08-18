@@ -1,5 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError
+import os
 from typing import List, Dict, Any, Optional
 from ..base import DocumentSource, Document
 from ..exceptions import SourceConnectionError, DocumentNotFoundError, InvalidConfigurationError
@@ -143,3 +144,38 @@ class S3Source(DocumentSource):
             return True
         except ClientError as e:
             raise SourceConnectionError(f"S3 delete error: {e}")
+
+    def delete_document(self, config: Dict[str, Any], key: str) -> bool:
+        """Elimina un objeto de S3."""
+        try:
+            self.delete_object(config, key)
+            return True
+        except Exception as e:
+            print(f"S3 delete error: {e}")
+            return False
+
+    def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        """
+        Mueve un objeto dentro del mismo bucket.
+        destination puede ser:
+        - Un prefijo que termina en '/' (se conserva el nombre)
+        - Un nuevo key completo
+        """
+        bucket = config.get('bucket_name') or config.get('bucket')
+        if not bucket:
+            raise InvalidConfigurationError("Missing 'bucket' in S3 config")
+        s3 = self._get_client(config)
+        # Determinar destino
+        if destination.endswith('/'):
+            filename = os.path.basename(key)
+            dest_key = destination + filename
+        else:
+            dest_key = destination
+        try:
+            copy_source = {'Bucket': bucket, 'Key': key}
+            s3.copy_object(CopySource=copy_source, Bucket=bucket, Key=dest_key)
+            s3.delete_object(Bucket=bucket, Key=key)
+            return True
+        except Exception as e:
+            print(f"S3 move error: {e}")
+            return False

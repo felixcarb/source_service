@@ -241,20 +241,20 @@ class DriveSource(DocumentSource):
     def _move_to_folder(self, config: Dict[str, Any], file_id: str, folder_id: str) -> bool:
         """Move a file to a different folder."""
         url = f"https://www.googleapis.com/drive/v3/files/{file_id}"
-        # First, get current parents
-        response = self._request('GET', url, config, params={
-                                 "fields": "parents"})
-        parents = response.json().get('parents', [])
-        remove_parents = ','.join(parents) if parents else None
-        add_parents = folder_id
-
-        params = {}
-        if remove_parents:
-            params["removeParents"] = remove_parents
-        params["addParents"] = add_parents
-
-        # Empty body, just update parents
         try:
+            # First, get current parents
+            response = self._request('GET', url, config, params={
+                                    "fields": "parents"})
+            parents = response.json().get('parents', [])
+            remove_parents = ','.join(parents) if parents else None
+            add_parents = folder_id
+
+            params = {}
+            if remove_parents:
+                params["removeParents"] = remove_parents
+            params["addParents"] = add_parents
+
+            # Empty body, just update parents
             self._request('PATCH', url, config, params=params, json={})
             return True
         except SourceConnectionError:
