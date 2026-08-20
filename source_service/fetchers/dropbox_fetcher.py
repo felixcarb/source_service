@@ -1,4 +1,5 @@
 # source_service/fetchers/dropbox_fetcher.py
+import logging
 import os
 import requests
 from typing import List, Dict, Any, Optional
@@ -8,6 +9,8 @@ from ..exceptions import (
     AuthenticationError,
     InvalidConfigurationError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DropboxSource(DocumentSource):
@@ -185,22 +188,28 @@ class DropboxSource(DocumentSource):
 
     def delete_document(self, config: Dict[str, Any], key: str) -> bool:
         """Delete a file from Dropbox."""
+        logger.debug(f"Dropbox delete: key={key}")
         url = "https://api.dropboxapi.com/2/files/delete_v2"
         payload = {"path": f"/{key}"}
         try:
             self._request('POST', url, config, json=payload)
+            logger.debug(f"Dropbox delete successful: {key}")
             return True
-        except SourceConnectionError:
+        except SourceConnectionError as e:
+            logger.error(f"Dropbox delete error for {key}: {e}", exc_info=True)
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
         """Move a file within Dropbox. Destination should be a path (including filename)."""
+        logger.debug(f"Dropbox move: key={key}, destination={destination}")
         if not destination.startswith('/'):
             destination = '/' + destination
         # If destination is a directory, we need to append the file name
         # We'll check if destination ends with '/', if so assume directory and append basename.
         if destination.endswith('/'):
             destination += os.path.basename(key)
+            logger.debug(
+                f"Dropbox move: destination resolved to directory: {destination}")
 
         url = "https://api.dropboxapi.com/2/files/move_v2"
         payload = {
@@ -209,6 +218,9 @@ class DropboxSource(DocumentSource):
         }
         try:
             self._request('POST', url, config, json=payload)
+            logger.debug(f"Dropbox move successful: {key} -> {destination}")
             return True
-        except SourceConnectionError:
+        except SourceConnectionError as e:
+            logger.error(
+                f"Dropbox move error for {key} to {destination}: {e}", exc_info=True)
             return False

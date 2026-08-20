@@ -1,9 +1,12 @@
 import boto3
 from botocore.exceptions import ClientError
+import logging
 import os
 from typing import List, Dict, Any, Optional
 from ..base import DocumentSource, Document
 from ..exceptions import SourceConnectionError, DocumentNotFoundError, InvalidConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 class S3Source(DocumentSource):
@@ -147,11 +150,13 @@ class S3Source(DocumentSource):
 
     def delete_document(self, config: Dict[str, Any], key: str) -> bool:
         """Elimina un objeto de S3."""
+        logger.debug(f"S3 delete: key={key}")
         try:
             self.delete_object(config, key)
+            logger.debug(f"S3 delete successful: {key}")
             return True
         except Exception as e:
-            print(f"S3 delete error: {e}")
+            logger.error(f"S3 delete error for {key}: {e}", exc_info=True)
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
@@ -161,9 +166,13 @@ class S3Source(DocumentSource):
         - Un prefijo que termina en '/' (se conserva el nombre)
         - Un nuevo key completo
         """
+        logger.debug(f"S3 move: key={key}, destination={destination}")
         bucket = config.get('bucket_name') or config.get('bucket')
         if not bucket:
-            raise InvalidConfigurationError("Missing 'bucket' in S3 config")
+            error_msg = "Missing 'bucket' in S3 config"
+            logger.error(error_msg)
+            raise InvalidConfigurationError(error_msg)
+
         s3 = self._get_client(config)
         # Determinar destino
         if destination.endswith('/'):
@@ -171,11 +180,15 @@ class S3Source(DocumentSource):
             dest_key = destination + filename
         else:
             dest_key = destination
+        logger.debug(f"S3 move: resolved dest_key={dest_key}")
+
         try:
             copy_source = {'Bucket': bucket, 'Key': key}
             s3.copy_object(CopySource=copy_source, Bucket=bucket, Key=dest_key)
             s3.delete_object(Bucket=bucket, Key=key)
+            logger.debug(f"S3 move successful: {key} -> {dest_key}")
             return True
         except Exception as e:
-            print(f"S3 move error: {e}")
+            logger.error(
+                f"S3 move error for {key} to {dest_key}: {e}", exc_info=True)
             return False
