@@ -1,3 +1,4 @@
+import logging
 import paramiko
 import os
 from typing import List, Dict, Any, Optional
@@ -104,18 +105,30 @@ class SFTPSource(DocumentSource):
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
         """Move/rename a file en SFTP."""
+        logger = logging.getLogger(__name__)
+        logger.debug(f"SFTP move: key={key}, destination={destination}")
         sftp = self._connect(config)
         try:
             if destination.endswith('/'):
-                # if destiny is a directory: keep name
                 filename = os.path.basename(key)
                 new_path = os.path.join(destination, filename)
             else:
                 new_path = destination
+            logger.debug(f"SFTP move: new_path={new_path}")
+
+            try:
+                sftp.stat(destination if destination.endswith(
+                    '/') else os.path.dirname(destination))
+                logger.debug("SFTP move: destination directory exists")
+            except FileNotFoundError:
+                logger.error(
+                    f"SFTP move: destination directory does not exist: {destination}")
+                return False
             sftp.rename(key, new_path)
+            logger.debug("SFTP move: rename successful")
             return True
         except Exception as e:
-            print(f"SFTP move error: {e}")
+            logger.error(f"SFTP move error: {e}", exc_info=True)
             return False
         finally:
             sftp.close()
