@@ -160,28 +160,25 @@ class S3Source(DocumentSource):
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
-        """
-        Mueve un objeto dentro del mismo bucket.
-        destination puede ser:
-        - Un prefijo que termina en '/' (se conserva el nombre)
-        - Un nuevo key completo
-        """
         logger.debug(f"S3 move: key={key}, destination={destination}")
         bucket = config.get('bucket_name') or config.get('bucket')
         if not bucket:
-            error_msg = "Missing 'bucket' in S3 config"
-            logger.error(error_msg)
-            raise InvalidConfigurationError(error_msg)
+            logger.error("Missing 'bucket' in S3 config")
+            return False
 
-        s3 = self._get_client(config)
-        # Determinar destino
-        if destination.endswith('/'):
-            filename = os.path.basename(key)
-            dest_key = destination + filename
+        # Normalizar destino: eliminar barras iniciales y finales
+        destination = destination.strip('/')
+
+        # Si destination está vacío, usar solo el nombre del archivo (mover a la raíz)
+        if not destination:
+            dest_key = os.path.basename(key)
         else:
-            dest_key = destination
+            filename = os.path.basename(key)
+            dest_key = f"{destination}/{filename}"
+
         logger.debug(f"S3 move: resolved dest_key={dest_key}")
 
+        s3 = self._get_client(config)
         try:
             copy_source = {'Bucket': bucket, 'Key': key}
             s3.copy_object(CopySource=copy_source, Bucket=bucket, Key=dest_key)

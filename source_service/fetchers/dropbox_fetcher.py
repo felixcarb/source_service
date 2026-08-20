@@ -202,25 +202,32 @@ class DropboxSource(DocumentSource):
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
         """Move a file within Dropbox. Destination should be a path (including filename)."""
         logger.debug(f"Dropbox move: key={key}, destination={destination}")
-        if not destination.startswith('/'):
-            destination = '/' + destination
-        # If destination is a directory, we need to append the file name
-        # We'll check if destination ends with '/', if so assume directory and append basename.
-        if destination.endswith('/'):
-            destination += os.path.basename(key)
-            logger.debug(
-                f"Dropbox move: destination resolved to directory: {destination}")
+
+        # Guardar si el destino original es un directorio
+        is_directory = destination.endswith('/')
+
+        # Normalizar: eliminar barras iniciales y finales
+        destination = destination.strip('/')
+
+        if not destination:
+            dest_path = f"/{os.path.basename(key)}"
+        elif is_directory:
+            dest_path = f"/{destination}/{os.path.basename(key)}"
+        else:
+            dest_path = f"/{destination}"
+
+        logger.debug(f"Dropbox move: resolved dest_path={dest_path}")
 
         url = "https://api.dropboxapi.com/2/files/move_v2"
         payload = {
             "from_path": f"/{key}",
-            "to_path": destination,
+            "to_path": dest_path,
         }
         try:
             self._request('POST', url, config, json=payload)
-            logger.debug(f"Dropbox move successful: {key} -> {destination}")
+            logger.debug(f"Dropbox move successful: {key} -> {dest_path}")
             return True
         except SourceConnectionError as e:
             logger.error(
-                f"Dropbox move error for {key} to {destination}: {e}", exc_info=True)
+                f"Dropbox move error for {key} to {dest_path}: {e}", exc_info=True)
             return False
