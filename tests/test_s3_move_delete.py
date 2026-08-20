@@ -15,7 +15,7 @@ class TestS3SourceOperations(unittest.TestCase):
             'region': 'us-east-1',
         }
         self.key = 'folder/file.pdf'
-        self.destination = 'processed/'
+        self.destination = 'processed/'  # con barra, se trata como directorio
 
     @patch('source_service.fetchers.s3_fetcher.S3Source._get_client')
     def test_move_document_to_directory(self, mock_get_client):
@@ -27,7 +27,6 @@ class TestS3SourceOperations(unittest.TestCase):
             self.config, self.key, self.destination
         )
 
-        # Se espera que el destino sea 'processed/file.pdf'
         expected_dest_key = 'processed/file.pdf'
         mock_s3.copy_object.assert_called_once_with(
             CopySource={'Bucket': 'test-bucket', 'Key': self.key},
@@ -40,20 +39,21 @@ class TestS3SourceOperations(unittest.TestCase):
         self.assertTrue(result)
 
     @patch('source_service.fetchers.s3_fetcher.S3Source._get_client')
-    def test_move_document_with_full_key(self, mock_get_client):
-        """Mover a un key completo (cambiar nombre y/o ruta)."""
+    def test_move_document_to_directory_without_slash(self, mock_get_client):
+        """Mover a un prefijo sin barra final: también se trata como directorio."""
         mock_s3 = Mock()
         mock_get_client.return_value = mock_s3
 
-        destination_full = 'archive/2024/file.pdf'
+        dest_without_slash = 'processed'
         result = self.fetcher.move_document(
-            self.config, self.key, destination_full
+            self.config, self.key, dest_without_slash
         )
 
+        expected_dest_key = 'processed/file.pdf'
         mock_s3.copy_object.assert_called_once_with(
             CopySource={'Bucket': 'test-bucket', 'Key': self.key},
             Bucket='test-bucket',
-            Key=destination_full
+            Key=expected_dest_key
         )
         mock_s3.delete_object.assert_called_once_with(
             Bucket='test-bucket', Key=self.key
@@ -71,7 +71,6 @@ class TestS3SourceOperations(unittest.TestCase):
             self.config, self.key, self.destination
         )
 
-        # No debe llamar a delete_object si falla la copia
         mock_s3.delete_object.assert_not_called()
         self.assertFalse(result)
 

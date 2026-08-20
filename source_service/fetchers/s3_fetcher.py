@@ -160,6 +160,9 @@ class S3Source(DocumentSource):
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
+        """
+        Move an S3 object to a directory. Always treats destination as a folder.
+        """
         logger.debug(f"S3 move: key={key}, destination={destination}")
         bucket = config.get('bucket_name') or config.get('bucket')
         if not bucket:
@@ -167,14 +170,14 @@ class S3Source(DocumentSource):
             return False
 
         # Normalizar destino: eliminar barras iniciales y finales
-        destination = destination.strip('/')
+        dest_dir = destination.strip('/')
+        filename = os.path.basename(key)
 
-        # Si destination está vacío, usar solo el nombre del archivo (mover a la raíz)
-        if not destination:
-            dest_key = os.path.basename(key)
+        # Construir la clave destino: siempre directorio + nombre del archivo
+        if dest_dir:
+            dest_key = f"{dest_dir}/{filename}"
         else:
-            filename = os.path.basename(key)
-            dest_key = f"{destination}/{filename}"
+            dest_key = filename  # raíz del bucket
 
         logger.debug(f"S3 move: resolved dest_key={dest_key}")
 

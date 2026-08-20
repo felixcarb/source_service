@@ -200,21 +200,17 @@ class DropboxSource(DocumentSource):
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
-        """Move a file within Dropbox. Destination should be a path (including filename)."""
+        """Move a file to a directory in Dropbox. Always treats destination as a folder."""
         logger.debug(f"Dropbox move: key={key}, destination={destination}")
 
-        # Guardar si el destino original es un directorio
-        is_directory = destination.endswith('/')
-
         # Normalizar: eliminar barras iniciales y finales
-        destination = destination.strip('/')
+        dest_dir = destination.strip('/')
 
-        if not destination:
+        # Construir la ruta destino: siempre añadir el nombre del archivo
+        if not dest_dir:
             dest_path = f"/{os.path.basename(key)}"
-        elif is_directory:
-            dest_path = f"/{destination}/{os.path.basename(key)}"
         else:
-            dest_path = f"/{destination}"
+            dest_path = f"/{dest_dir}/{os.path.basename(key)}"
 
         logger.debug(f"Dropbox move: resolved dest_path={dest_path}")
 
