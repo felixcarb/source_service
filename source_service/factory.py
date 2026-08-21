@@ -31,9 +31,9 @@ class SourceFactory:
         cls._registry[source_type.lower()] = source_class
 
     @classmethod
-    def get_source(cls, source_type: str) -> DocumentSource:
+    def get_source(cls, source_type: str, **kwargs) -> DocumentSource:
         source_class = cls._registry.get(source_type.lower())
         if not source_class:
             raise InvalidConfigurationError(
                 f"Unsupported source type: {source_type}")
-        return source_class()
+        return source_class(**kwargs)

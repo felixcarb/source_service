@@ -14,6 +14,9 @@ class Document:
 class DocumentSource(ABC):
     """Base interface for all document sources."""
 
+    def __init__(self, **kwargs):
+        pass
+
     @abstractmethod
     def list_documents(self, config: Dict[str, Any]) -> List[Document]:
         """List available documents (metadata only)."""

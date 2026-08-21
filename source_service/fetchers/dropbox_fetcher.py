@@ -2,7 +2,7 @@
 import logging
 import os
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from ..base import DocumentSource, Document
 from ..exceptions import (
     SourceConnectionError,
@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 class DropboxSource(DocumentSource):
     """Fetcher for Dropbox files using the API v2."""
 
+    def __init__(self, on_token_refresh: Optional[Callable[[Dict[str, Any]], None]] = None):
+        """
+        :param on_token_refresh: Optional callback that receives the updated config dict
+                                 after a token refresh. Useful for persisting the new token.
+        """
+        self.on_token_refresh = on_token_refresh
+
     def _get_headers(self, access_token: str) -> Dict[str, str]:
         return {
             "Authorization": f"Bearer {access_token}",
@@ -23,7 +30,7 @@ class DropboxSource(DocumentSource):
         }
 
     def _refresh_access_token(self, config: Dict[str, Any]) -> str:
-        """Refresh the access token using refresh_token."""
+        """Refresh the access token using refresh_token and invoke the callback if set."""
         refresh_token = config.get('refresh_token')
         client_id = config.get('client_id')
         client_secret = config.get('client_secret')
@@ -47,24 +54,27 @@ class DropboxSource(DocumentSource):
             if not new_token:
                 raise AuthenticationError(
                     "No access_token in refresh response")
+
+            # Update config in memory
+            config['access_token'] = new_token
+
+            # If a callback was provided, call it with the updated config
+            if self.on_token_refresh:
+                try:
+                    self.on_token_refresh(config)
+                    logger.info(
+                        "Token refresh callback executed successfully.")
+                except Exception as e:
+                    logger.error(f"Token refresh callback failed: {e}")
+
+            logger.info("Dropbox access token refreshed successfully.")
             return new_token
         except requests.RequestException as e:
+            logger.error(f"Token refresh request failed: {e}")
             raise AuthenticationError(f"Failed to refresh token: {e}")
 
-    def _ensure_valid_token(self, config: Dict[str, Any]) -> str:
-        """Return a valid access token, refreshing if necessary."""
-        access_token = config.get('access_token')
-        if not access_token:
-            raise InvalidConfigurationError(
-                "Missing 'access_token' in Dropbox config")
-
-        # If we have refresh token and a way to check expiration, we could implement logic here.
-        # For simplicity, we assume the token is valid and will be refreshed if a 401 occurs.
-        # The actual refresh will happen in the request wrapper.
-        return access_token
-
     def _request(self, method: str, url: str, config: Dict[str, Any], **kwargs) -> requests.Response:
-        """Make an authenticated request to Dropbox API, handling token refresh on 401."""
+        """Make an authenticated request, refreshing token on 401/403/501."""
         access_token = config.get('access_token')
         if not access_token:
             raise InvalidConfigurationError(
@@ -74,23 +84,27 @@ class DropboxSource(DocumentSource):
         if 'headers' in kwargs:
             headers.update(kwargs.pop('headers'))
 
-        # Only add Content-Type if not explicitly set (download endpoint uses different headers)
         if 'Content-Type' not in headers:
             headers['Content-Type'] = 'application/json'
 
         try:
             response = requests.request(method, url, headers=headers, **kwargs)
-            if response.status_code == 401:
-                # Token expired, try to refresh
+
+            # If the response indicates an authentication issue, try to refresh
+            if response.status_code in (401, 403, 501):
+                logger.info(
+                    f"Dropbox responded with {response.status_code}, attempting token refresh...")
                 try:
                     new_token = self._refresh_access_token(config)
-                    # Update config with new token (in memory)
-                    config['access_token'] = new_token
                     headers['Authorization'] = f"Bearer {new_token}"
                     response = requests.request(
                         method, url, headers=headers, **kwargs)
+                    response.raise_for_status()
+                    return response
                 except Exception as e:
+                    logger.error(f"Token refresh failed: {e}")
                     raise AuthenticationError(f"Failed to refresh token: {e}")
+
             response.raise_for_status()
             return response
         except requests.RequestException as e:
