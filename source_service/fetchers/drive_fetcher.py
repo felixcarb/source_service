@@ -1,6 +1,7 @@
 # source_service/fetchers/drive_fetcher.py
+import logging
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from ..base import DocumentSource, Document
 from ..exceptions import (
     SourceConnectionError,
@@ -8,11 +9,16 @@ from ..exceptions import (
     InvalidConfigurationError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class DriveSource(DocumentSource):
     """
     Fetcher for Google Drive files using the API v3.
     """
+
+    def __init__(self, on_token_refresh: Optional[Callable[[Dict[str, Any]], None]] = None):
+        self.on_token_refresh = on_token_refresh
 
     def _get_headers(self, access_token: str) -> Dict[str, str]:
         return {
@@ -21,7 +27,6 @@ class DriveSource(DocumentSource):
         }
 
     def _refresh_access_token(self, config: Dict[str, Any]) -> str:
-        """Refresh the access token using refresh_token."""
         refresh_token = config.get('refresh_token')
         client_id = config.get('client_id')
         client_secret = config.get('client_secret')
@@ -41,12 +46,35 @@ class DriveSource(DocumentSource):
         try:
             response = requests.post(url, data=data, timeout=30)
             response.raise_for_status()
-            new_token = response.json().get('access_token')
+            token_data = response.json()
+            new_token = token_data.get('access_token')
             if not new_token:
                 raise AuthenticationError(
                     "No access_token in refresh response")
+
+            # Actualizar configuración en memoria
+            config['access_token'] = new_token
+
+            # Si Google devuelve un nuevo refresh_token (raro, pero posible)
+            if token_data.get('refresh_token'):
+                config['refresh_token'] = token_data['refresh_token']
+
+            # Ejecutar callback para persistir
+            if self.on_token_refresh:
+                try:
+                    self.on_token_refresh(config)
+                    logger.info(
+                        "Google Drive token refresh callback executed successfully.")
+                except Exception as e:
+                    logger.error(
+                        f"Google Drive token refresh callback failed: {e}")
+
+            logger.info("Google Drive access token refreshed successfully.")
             return new_token
         except requests.RequestException as e:
+            logger.error(f"Google Drive token refresh request failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response body: {e.response.text}")
             raise AuthenticationError(f"Failed to refresh token: {e}")
 
     def _request(self, method: str, url: str, config: Dict[str, Any], **kwargs) -> requests.Response:
