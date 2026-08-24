@@ -1,6 +1,7 @@
 # source_service/fetchers/onedrive_fetcher.py
+import logging
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from ..base import DocumentSource, Document
 from ..exceptions import (
     SourceConnectionError,
@@ -8,11 +9,20 @@ from ..exceptions import (
     InvalidConfigurationError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class OneDriveSource(DocumentSource):
     """
     Fetcher for Microsoft OneDrive using the Graph API v1.0.
     """
+
+    def __init__(self, on_token_refresh: Optional[Callable[[Dict[str, Any]], None]] = None):
+        """
+        :param on_token_refresh: Optional callback that receives the updated config dict
+                                 after a token refresh. Useful for persisting the new token.
+        """
+        self.on_token_refresh = on_token_refresh
 
     def _get_headers(self, access_token: str) -> Dict[str, str]:
         return {
@@ -21,7 +31,7 @@ class OneDriveSource(DocumentSource):
         }
 
     def _refresh_access_token(self, config: Dict[str, Any]) -> str:
-        """Refresh the access token using refresh_token."""
+        """Refresh the access token and invoke callback if set."""
         refresh_token = config.get('refresh_token')
         client_id = config.get('client_id')
         client_secret = config.get('client_secret')
@@ -47,12 +57,30 @@ class OneDriveSource(DocumentSource):
             if not new_token:
                 raise AuthenticationError(
                     "No access_token in refresh response")
+
+            # Update config in memory
+            config['access_token'] = new_token
+
+            # Invoke callback if set
+            if self.on_token_refresh:
+                try:
+                    self.on_token_refresh(config)
+                    logger.info(
+                        "OneDrive token refresh callback executed successfully.")
+                except Exception as e:
+                    logger.error(
+                        f"OneDrive token refresh callback failed: {e}")
+
+            logger.info("OneDrive access token refreshed successfully.")
             return new_token
         except requests.RequestException as e:
+            logger.error(f"OneDrive token refresh request failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response body: {e.response.text}")
             raise AuthenticationError(f"Failed to refresh token: {e}")
 
     def _request(self, method: str, url: str, config: Dict[str, Any], **kwargs) -> requests.Response:
-        """Make an authenticated request to Microsoft Graph API, handling token refresh on 401."""
+        """Make an authenticated request, refreshing token on 401/403/400."""
         access_token = config.get('access_token')
         if not access_token:
             raise InvalidConfigurationError(
@@ -67,15 +95,22 @@ class OneDriveSource(DocumentSource):
 
         try:
             response = requests.request(method, url, headers=headers, **kwargs)
-            if response.status_code == 401:
+
+            # If the response indicates an authentication issue, try to refresh
+            if response.status_code in (401, 403, 400):
+                logger.info(
+                    f"OneDrive responded with {response.status_code}, attempting token refresh...")
                 try:
                     new_token = self._refresh_access_token(config)
-                    config['access_token'] = new_token
                     headers['Authorization'] = f"Bearer {new_token}"
                     response = requests.request(
                         method, url, headers=headers, **kwargs)
+                    response.raise_for_status()
+                    return response
                 except Exception as e:
+                    logger.error(f"OneDrive token refresh failed: {e}")
                     raise AuthenticationError(f"Failed to refresh token: {e}")
+
             response.raise_for_status()
             return response
         except requests.RequestException as e:
@@ -107,12 +142,23 @@ class OneDriveSource(DocumentSource):
         else:
             return f"{base}/drives/{drive_id}/root"
 
+    def _get_item_url(self, config: Dict[str, Any], item_id: str) -> str:
+        drive_id = self._get_drive_id(config)
+        return f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}"
+
     def list_documents(self, config: Dict[str, Any]) -> List[Document]:
-        path = config.get('path', '')
-        root_url = self._build_item_url(config, path)
+        folder_id = config.get('folder_id')
+        if folder_id:
+            logger.debug(f"Listing OneDrive folder by folder_id: {folder_id}")
+            drive_id = self._get_drive_id(config)
+            root_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}"
+        else:
+            logger.debug("Listing OneDrive root folder")
+            root_url = self._build_item_url(config, config.get('path', ''))
+
         url = f"{root_url}/children"
         params = {
-            "$select": "id,name,size,lastModifiedDateTime,file,folder,deleted",
+            "$select": "id,name,size,lastModifiedDateTime,file,folder,deleted,remoteItem",
             "$orderby": "name",
         }
 
@@ -121,9 +167,11 @@ class OneDriveSource(DocumentSource):
             response = self._request('GET', url, config, params=params)
             data = response.json()
             for item in data.get('value', []):
-                # Skip folders and deleted items
-                if item.get('folder') or item.get('deleted'):
+                # Saltar carpetas, elementos remotos y cualquier cosa que no sea un archivo
+                if (item.get('folder') or item.get('remoteItem') or 'file' not in item):
                     continue
+
+                # Solo archivos descargables
                 documents.append(Document(
                     key=item['id'],
                     metadata={
@@ -134,19 +182,19 @@ class OneDriveSource(DocumentSource):
                     }
                 ))
             url = data.get('@odata.nextLink')
-            params = None  # nextLink already includes params
+            params = None
 
         return documents
 
     def fetch_document(self, config: Dict[str, Any], key: str) -> Document:
         # key is the item ID
-        content_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{key}/content"
+        item_url = self._get_item_url(config, key)
+        content_url = f"{item_url}/content"
         response = self._request('GET', content_url, config)
         content = response.content
 
         # Get metadata
-        metadata_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{key}"
-        meta_resp = self._request('GET', metadata_url, config)
+        meta_resp = self._request('GET', item_url, config)
         meta = meta_resp.json()
 
         return Document(
@@ -167,38 +215,31 @@ class OneDriveSource(DocumentSource):
         return [self.fetch_document(config, doc.key) for doc in docs]
 
     def delete_document(self, config: Dict[str, Any], key: str) -> bool:
-        url = f"https://graph.microsoft.com/v1.0/me/drive/items/{key}"
         try:
+            url = self._get_item_url(config, key)
             self._request('DELETE', url, config)
             return True
         except SourceConnectionError:
             return False
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
-        """
-        Move a file to a different folder.
-        destination can be a folder ID or a path (e.g., '/folder/subfolder').
-        """
-        # Determine destination ID or path
-        if destination.startswith('/'):
-            # It's a path, get the folder ID first
-            dest_url = self._build_item_url(config, destination)
-            try:
-                resp = self._request('GET', dest_url, config)
-                dest_item = resp.json()
-                dest_id = dest_item.get('id')
-                if not dest_id:
-                    return False
-            except Exception:
-                return False
-        else:
-            dest_id = destination
-
-        move_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{key}"
-        payload = {
-            "parentReference": {"id": dest_id}
-        }
         try:
+            # Determine destination ID
+            if destination.startswith('/'):
+                dest_url = self._build_item_url(config, destination)
+                try:
+                    resp = self._request('GET', dest_url, config)
+                    dest_item = resp.json()
+                    dest_id = dest_item.get('id')
+                    if not dest_id:
+                        return False
+                except Exception:
+                    return False
+            else:
+                dest_id = destination
+
+            move_url = self._get_item_url(config, key)
+            payload = {"parentReference": {"id": dest_id}}
             self._request('PATCH', move_url, config, json=payload)
             return True
         except SourceConnectionError:
