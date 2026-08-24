@@ -31,53 +31,77 @@ class OneDriveSource(DocumentSource):
         }
 
     def _refresh_access_token(self, config: Dict[str, Any]) -> str:
-        """Refresh the access token and invoke callback if set."""
-        refresh_token = config.get('refresh_token')
-        client_id = config.get('client_id')
-        client_secret = config.get('client_secret')
+        refresh_token = config.get("refresh_token")
+        client_id = config.get("client_id")
+        client_secret = config.get("client_secret")
+        tenant = config.get("tenant_id", "consumers")
 
-        if not refresh_token or not client_id or not client_secret:
+        if not refresh_token or not client_id:
             raise AuthenticationError(
-                "Missing refresh_token, client_id, or client_secret for token refresh"
+                "Missing refresh_token or client_id for token refresh"
             )
 
-        url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+
         data = {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
             "client_id": client_id,
-            "client_secret": client_secret,
-            "scope": "https://graph.microsoft.com/Files.ReadWrite offline_access",
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
         }
+
+        if client_secret:
+            data["client_secret"] = client_secret
+
+        logger.debug(
+            "Refreshing OneDrive token: tenant=%s client_id=%s",
+            tenant,
+            client_id,
+        )
 
         try:
             response = requests.post(url, data=data, timeout=30)
             response.raise_for_status()
-            new_token = response.json().get('access_token')
-            if not new_token:
+            token_data = response.json()
+        except requests.RequestException as exc:
+            body = (
+                exc.response.text
+                if getattr(exc, "response", None) is not None
+                else None
+            )
+            logger.error(
+                "OneDrive refresh failed: status=%s body=%s",
+                getattr(exc.response, "status_code", None),
+                body,
+            )
+            raise AuthenticationError(
+                "Failed to refresh OneDrive token"
+            ) from exc
+
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise AuthenticationError(
+                "OneDrive did not return an access_token"
+            )
+
+        config["access_token"] = access_token
+
+        # Obligatorio persistirlo cuando Microsoft entregue uno nuevo.
+        if new_refresh_token := token_data.get("refresh_token"):
+            config["refresh_token"] = new_refresh_token
+
+        if self.on_token_refresh:
+            try:
+                self.on_token_refresh(config)
+            except Exception as exc:
+                logger.exception(
+                    "The OneDrive token was refreshed but could not be persisted"
+                )
                 raise AuthenticationError(
-                    "No access_token in refresh response")
+                    "Refreshed OneDrive token could not be persisted"
+                ) from exc
 
-            # Update config in memory
-            config['access_token'] = new_token
-
-            # Invoke callback if set
-            if self.on_token_refresh:
-                try:
-                    self.on_token_refresh(config)
-                    logger.info(
-                        "OneDrive token refresh callback executed successfully.")
-                except Exception as e:
-                    logger.error(
-                        f"OneDrive token refresh callback failed: {e}")
-
-            logger.info("OneDrive access token refreshed successfully.")
-            return new_token
-        except requests.RequestException as e:
-            logger.error(f"OneDrive token refresh request failed: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response body: {e.response.text}")
-            raise AuthenticationError(f"Failed to refresh token: {e}")
+        logger.info("OneDrive token refreshed successfully")
+        return access_token
 
     def _request(self, method: str, url: str, config: Dict[str, Any], **kwargs) -> requests.Response:
         """Make an authenticated request, refreshing token on 401/403/400."""
