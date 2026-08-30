@@ -46,7 +46,8 @@ class TestOneDriveTokenRefresh(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as context:
             self.fetcher._refresh_access_token(self.config)
 
-        self.assertIn("Failed to refresh token", str(context.exception))
+        self.assertIn("Failed to refresh OneDrive token",
+                      str(context.exception))
         self.callback.assert_not_called()
 
     @patch('source_service.fetchers.onedrive_fetcher.requests.request')

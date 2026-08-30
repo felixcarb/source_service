@@ -1,170 +1,157 @@
-# source_service/fetchers/pop3.py
+import email
+import logging
 import poplib
 import ssl
-import email
 from email.policy import default
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from ..base import DocumentSource, Document
 from ..exceptions import SourceConnectionError, AuthenticationError, DocumentNotFoundError, InvalidConfigurationError
 
+logger = logging.getLogger(__name__)
+SUPPORTED_ATTACHMENT_TYPES = {"application/octet-stream", "application/pdf", "image/jpeg", "image/png"}
+
 
 class POP3Source(DocumentSource):
-    """Fetcher para servidores POP3 (correo electrónico)."""
+    """Read-only POP3 source."""
 
     def _connect(self, config: Dict[str, Any]) -> poplib.POP3:
-        """Establece conexión POP3 (con o sin SSL)."""
-        host = config.get('host')
-        port = config.get('port', 995 if config.get('use_ssl', True) else 110)
-        username = config.get('username')
-        password = config.get('password')
-        use_ssl = config.get('use_ssl', True)
-        timeout = config.get('timeout', 30)
-
-        if not host or not username:
-            raise InvalidConfigurationError(
-                "Missing 'host' or 'username' in POP3 config")
-
+        host = config.get("host")
+        username = config.get("username")
+        password = config.get("password")
+        use_ssl = bool(config.get("use_ssl", True))
+        port = int(config.get("port", 995 if use_ssl else 110))
+        timeout = float(config.get("timeout", 30))
+        validate_cert = bool(config.get("validate_cert", True))
+        missing = [k for k, v in (("host", host), ("username", username), ("password", password)) if not v]
+        if missing:
+            raise InvalidConfigurationError(f"Missing required POP3 configuration: {', '.join(missing)}")
+        conn: Optional[poplib.POP3] = None
         try:
             if use_ssl:
-                # Conexión SSL
                 context = ssl.create_default_context()
-                if config.get('validate_cert', True) is False:
+                if not validate_cert:
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
-                conn = poplib.POP3_SSL(
-                    host, port, timeout=timeout, context=context)
+                conn = poplib.POP3_SSL(host, port, timeout=timeout, context=context)
             else:
                 conn = poplib.POP3(host, port, timeout=timeout)
-            conn.user(username)
-            conn.pass_(password)
+            conn.user(str(username))
+            conn.pass_(str(password))
             return conn
-        except poplib.error_proto as e:
-            raise AuthenticationError(f"POP3 authentication failed: {e}")
-        except Exception as e:
-            raise SourceConnectionError(f"POP3 connection error: {e}")
+        except poplib.error_proto as exc:
+            self._close(conn)
+            raise AuthenticationError(f"POP3 authentication failed: {exc}") from exc
+        except (OSError, ssl.SSLError, ValueError) as exc:
+            self._close(conn)
+            raise SourceConnectionError(f"POP3 connection error: {exc}") from exc
+        except Exception as exc:
+            self._close(conn)
+            raise SourceConnectionError(f"POP3 connection error: {exc}") from exc
+
+    @staticmethod
+    def _close(conn: Optional[poplib.POP3]) -> None:
+        if conn is None:
+            return
+        try:
+            conn.quit()
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _message_number(key: str) -> int:
+        if not isinstance(key, str) or not key.startswith("msg_"):
+            raise DocumentNotFoundError(f"Invalid POP3 document key: {key!r}")
+        try:
+            number = int(key[4:])
+        except ValueError as exc:
+            raise DocumentNotFoundError(f"Invalid POP3 document key: {key!r}") from exc
+        if number < 1:
+            raise DocumentNotFoundError(f"Invalid POP3 message number: {number}")
+        return number
 
     def _parse_message(self, raw_message: bytes) -> Dict[str, Any]:
-        """Parsea un mensaje crudo y devuelve metadatos y adjuntos."""
         msg = email.message_from_bytes(raw_message, policy=default)
-        metadata = {
-            'subject': msg.get('Subject', ''),
-            'from': msg.get('From', ''),
-            'date': msg.get('Date', ''),
-            'message_id': msg.get('Message-ID', ''),
-        }
+        metadata = {k: msg.get(k, "") for k in ("Subject", "From", "To", "Date", "Message-ID")}
+        metadata = {k.lower().replace("-", "_"): v for k, v in metadata.items()}
         attachments = []
         for part in msg.walk():
-            if part.get_content_maintype() == 'multipart':
+            if part.is_multipart() or not part.get_filename():
                 continue
-            if part.get_content_type() in ('application/octet-stream', 'application/pdf', 'image/jpeg', 'image/png', 'text/plain'):
-                filename = part.get_filename()
-                if filename:
-                    content = part.get_payload(decode=True)
-                    attachments.append({
-                        'filename': filename,
-                        'content': content,
-                        'content_type': part.get_content_type(),
-                    })
-        return {
-            'metadata': metadata,
-            'attachments': attachments,
-        }
+            content_type = part.get_content_type().lower()
+            if content_type not in SUPPORTED_ATTACHMENT_TYPES:
+                continue
+            content = part.get_payload(decode=True) or b""
+            attachments.append({"filename": part.get_filename(), "content": content, "content_type": content_type})
+        return {"metadata": metadata, "attachments": attachments}
+
+    def _list_headers(self, conn: poplib.POP3, number: int) -> Dict[str, Any]:
+        try:
+            _, lines, _ = conn.top(number, 0)
+        except poplib.error_proto:
+            _, lines, _ = conn.retr(number)
+        msg = email.message_from_bytes(b"\r\n".join(lines), policy=default)
+        return {"subject": msg.get("Subject", ""), "from": msg.get("From", ""), "to": msg.get("To", ""), "date": msg.get("Date", ""), "message_id": msg.get("Message-ID", "")}
 
     def list_documents(self, config: Dict[str, Any]) -> List[Document]:
-        """Lista los mensajes disponibles (solo metadatos, sin adjuntos)."""
         conn = self._connect(config)
         try:
-            # Obtener lista de mensajes (stat devuelve (num_messages, total_size))
-            num_messages, _ = conn.stat()
-            documents = []
-            for i in range(1, num_messages + 1):
-                # Obtener solo cabeceras para metadatos (TOP 0)
-                resp, lines, _ = conn.top(i, 0)
-                raw_headers = b'\n'.join(lines)
-                msg = email.message_from_bytes(raw_headers, policy=default)
-                documents.append(Document(
-                    key=f"msg_{i}",
-                    metadata={
-                        'subject': msg.get('Subject', ''),
-                        'from': msg.get('From', ''),
-                        'date': msg.get('Date', ''),
-                        'message_id': msg.get('Message-ID', ''),
-                        'size': 0,  # no calculamos tamaño real aquí
-                    }
-                ))
-            return documents
-        except Exception as e:
-            raise SourceConnectionError(f"POP3 list error: {e}")
+            count, mailbox_size = conn.stat()
+            sizes: Dict[int, int] = {}
+            try:
+                _, lines, _ = conn.list()
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            sizes[int(parts[0])] = int(parts[1])
+                        except ValueError:
+                            pass
+            except poplib.error_proto:
+                pass
+            return [Document(key=f"msg_{i}", metadata={**self._list_headers(conn, i), "message_number": i, "size": sizes.get(i, 0), "mailbox_size": mailbox_size}) for i in range(1, count + 1)]
+        except (AuthenticationError, InvalidConfigurationError, SourceConnectionError):
+            raise
+        except Exception as exc:
+            raise SourceConnectionError(f"POP3 list error: {exc}") from exc
         finally:
-            conn.quit()
+            self._close(conn)
 
     def fetch_document(self, config: Dict[str, Any], key: str) -> Document:
-        """Descarga un mensaje y extrae sus adjuntos como documentos individuales.
-        Si el mensaje tiene múltiples adjuntos, devolvemos el primero como documento.
-        """
-        if not key.startswith('msg_'):
-            raise DocumentNotFoundError(f"Invalid key format: {key}")
-        msg_num = int(key.split('_')[1])
-
+        number = self._message_number(key)
         conn = self._connect(config)
         try:
-            resp, lines, _ = conn.retr(msg_num)
-            raw_message = b'\n'.join(lines)
-            parsed = self._parse_message(raw_message)
-            if parsed['attachments']:
-                # Tomar el primer adjunto como documento
-                attach = parsed['attachments'][0]
-                return Document(
-                    key=attach['filename'],
-                    metadata={
-                        'subject': parsed['metadata']['subject'],
-                        'from': parsed['metadata']['from'],
-                        'date': parsed['metadata']['date'],
-                        'content_type': attach['content_type'],
-                        'size': len(attach['content']),
-                    },
-                    content=attach['content']
-                )
-            else:
-                # Si no hay adjuntos, devolver el mensaje como texto
-                return Document(
-                    key=f"message_{msg_num}",
-                    metadata=parsed['metadata'],
-                    content=raw_message,
-                )
-        except Exception as e:
-            raise SourceConnectionError(f"POP3 fetch error: {e}")
+            _, lines, _ = conn.retr(number)
+            raw = b"\r\n".join(lines)
+            parsed = self._parse_message(raw)
+            if parsed["attachments"]:
+                a = parsed["attachments"][0]
+                return Document(key=a["filename"], metadata={**parsed["metadata"], "message_number": number, "content_type": a["content_type"], "size": len(a["content"])}, content=a["content"])
+            return Document(key=f"message_{number}", metadata={**parsed["metadata"], "message_number": number, "content_type": "message/rfc822", "size": len(raw)}, content=raw)
+        except (DocumentNotFoundError, AuthenticationError, InvalidConfigurationError, SourceConnectionError):
+            raise
+        except Exception as exc:
+            raise SourceConnectionError(f"POP3 fetch error for {key!r}: {exc}") from exc
         finally:
-            conn.quit()
+            self._close(conn)
 
     def fetch_documents(self, config: Dict[str, Any], keys: Optional[List[str]] = None) -> List[Document]:
-        """Descarga todos los adjuntos de todos los mensajes, o solo los especificados."""
-        if keys:
-            return [self.fetch_document(config, key) for key in keys]
-        else:
-            docs = self.list_documents(config)
-            all_docs = []
-            for doc in docs:
-                try:
-                    fetched = self.fetch_document(config, doc.key)
-                    all_docs.append(fetched)
-                except Exception as e:
-                    # Loggear error pero continuar con los demás
-                    print(f"Error fetching {doc.key}: {e}")
-            return all_docs
+        selected = keys if keys is not None else [d.key for d in self.list_documents(config)]
+        result = []
+        for key in selected:
+            try:
+                result.append(self.fetch_document(config, key))
+            except DocumentNotFoundError:
+                raise
+            except Exception:
+                logger.exception("Failed to fetch POP3 message %s", key)
+        return result
 
     def move_document(self, config: Dict[str, Any], key: str, destination: str) -> bool:
-        """
-        POP3 no admite mover correos entre carpetas.
-        Siempre retorna False.
-        """
         return False
 
     def delete_document(self, config: Dict[str, Any], key: str) -> bool:
-        """
-        No se implementa eliminación de correos para evitar efectos laterales
-        (cambios en la numeración de mensajes).
-        Siempre retorna False.
-        """
         return False

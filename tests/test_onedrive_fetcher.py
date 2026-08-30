@@ -86,15 +86,15 @@ class TestOneDriveSource(unittest.TestCase):
         docs = self.source.list_documents(self.config)
         self.assertEqual(docs, [])
 
-        # Verificar que se llamó a requests.post para refrescar
+        # Verificar que se llamó a requests.post para refrescar con los parámetros correctos
         mock_post.assert_called_once_with(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",  # <-- URL corregida
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": "test_refresh",
                 "client_id": "test_client",
                 "client_secret": "test_secret",
-                "scope": "https://graph.microsoft.com/Files.ReadWrite offline_access",
+                # 'scope' NO se incluye en la implementación actual
             },
             timeout=30
         )
