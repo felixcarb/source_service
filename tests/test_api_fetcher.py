@@ -30,6 +30,7 @@ class TestAPISource(unittest.TestCase):
         mock_request.assert_called_once_with(
             'GET',
             'https://api.example.com/documents',
+            timeout=30,
             headers={'Accept': 'application/json'},
             params={},
             auth=None
@@ -48,6 +49,7 @@ class TestAPISource(unittest.TestCase):
         mock_request.assert_called_once_with(
             'GET',
             'https://api.example.com/documents',
+            timeout=30,
             headers={'Accept': 'application/json'},
             params={},
             auth=('user', 'pass')
@@ -66,6 +68,7 @@ class TestAPISource(unittest.TestCase):
         mock_request.assert_called_once_with(
             'GET',
             'https://api.example.com/documents',
+            timeout=30,
             headers={'Accept': 'application/json',
                      'Authorization': 'Bearer abc123'},
             params={},
@@ -100,7 +103,9 @@ class TestAPISource(unittest.TestCase):
         mock_request.assert_called_once_with(
             'GET',
             'https://api.example.com/documents/doc1.pdf',
+            timeout=30,
             headers={'Accept': 'application/json'},
+            params={},
             auth=None
         )
 
@@ -118,7 +123,9 @@ class TestAPISource(unittest.TestCase):
         mock_request.assert_called_once_with(
             'GET',
             'https://api.example.com/documents/doc1.pdf',
+            timeout=30,
             headers={'Accept': 'application/json'},
+            params={},
             auth=('user', 'pass')
         )
 
@@ -143,13 +150,23 @@ class TestAPISource(unittest.TestCase):
         self.assertEqual(mock_fetch_document.call_count, 2)
 
     @patch.object(APISource, 'list_documents')
-    def test_fetch_documents_all(self, mock_list_documents):
+    @patch.object(APISource, 'fetch_document')
+    def test_fetch_documents_all(self, mock_fetch_document, mock_list_documents):
         doc1 = Document(key='doc1.pdf', metadata={})
         doc2 = Document(key='doc2.pdf', metadata={})
         mock_list_documents.return_value = [doc1, doc2]
+
+        # Simular que fetch_document devuelve documentos con contenido
+        mock_fetch_document.side_effect = [
+            Document(key='doc1.pdf', metadata={}, content=b'c1'),
+            Document(key='doc2.pdf', metadata={}, content=b'c2')
+        ]
 
         docs = self.source.fetch_documents(self.config, keys=None)
         self.assertEqual(len(docs), 2)
         self.assertEqual(docs[0].key, 'doc1.pdf')
         self.assertEqual(docs[1].key, 'doc2.pdf')
+        self.assertEqual(docs[0].content, b'c1')
+        self.assertEqual(docs[1].content, b'c2')
         mock_list_documents.assert_called_once_with(self.config)
+        self.assertEqual(mock_fetch_document.call_count, 2)

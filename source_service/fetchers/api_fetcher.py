@@ -12,10 +12,6 @@ class APISource(DocumentSource):
             raise InvalidConfigurationError("Missing 'url' in API config")
 
     def _build_auth(self, config: Dict[str, Any], headers: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-        """
-        Build authentication tuple and optionally modify headers.
-        Returns auth tuple for basic auth, or None.
-        """
         auth = config.get('auth')
         if auth and 'username' in auth and 'password' in auth:
             return (auth['username'], auth['password'])
@@ -23,9 +19,9 @@ class APISource(DocumentSource):
             headers['Authorization'] = f"Bearer {auth['token']}"
         return None
 
-    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+    def _request(self, method: str, url: str, timeout: int = 30, **kwargs) -> requests.Response:
         try:
-            response = requests.request(method, url, **kwargs)
+            response = requests.request(method, url, timeout=timeout, **kwargs)
             response.raise_for_status()
             return response
         except requests.RequestException as e:
@@ -35,11 +31,12 @@ class APISource(DocumentSource):
         self._validate_config(config)
         url = config['url']
         headers = config.get('headers', {}).copy()
-        params = config.get('params', {})
+        params = config.get('params', {}).copy()
+        timeout = config.get('timeout', 30)
 
         auth_tuple = self._build_auth(config, headers)
         response = self._request(
-            'GET', url, headers=headers, params=params, auth=auth_tuple)
+            'GET', url, headers=headers, params=params, auth=auth_tuple, timeout=timeout)
 
         data = response.json()
         documents = []
@@ -55,10 +52,13 @@ class APISource(DocumentSource):
         url = config['url'].rstrip('/')
         doc_url = f"{url}/{key}"
         headers = config.get('headers', {}).copy()
+        # Parámetros adicionales para descarga
+        params = config.get('download_params', {}).copy()
+        timeout = config.get('timeout', 30)
 
         auth_tuple = self._build_auth(config, headers)
         response = self._request(
-            'GET', doc_url, headers=headers, auth=auth_tuple)
+            'GET', doc_url, headers=headers, params=params, auth=auth_tuple, timeout=timeout)
 
         content = response.content
         return Document(
@@ -73,4 +73,6 @@ class APISource(DocumentSource):
     def fetch_documents(self, config: Dict[str, Any], keys: Optional[List[str]] = None) -> List[Document]:
         if keys:
             return [self.fetch_document(config, key) for key in keys]
-        return self.list_documents(config)
+        # 🔥 CORREGIDO: descargar todos los documentos
+        docs = self.list_documents(config)
+        return [self.fetch_document(config, doc.key) for doc in docs]
